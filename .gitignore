@@ -10,3 +10,10 @@ plan.md
 opencode.json
 a-mem.pdf
 AGENTS.md
+*.env
+secrets*
+
+# API keys and credentials
+**/*.key
+**/*.pem
+**/*.p12
