@@ -78,20 +78,14 @@ Rules:
 - do not produce a turn-by-turn transcript
 - keep the context concise but useful as future background
 
-Format the response as a JSON object:
+CRITICAL: Return ONLY a valid JSON object. No markdown, no explanation, no code blocks.
+The response must be parseable by a JSON parser directly.
+
+Format:
 {
     "context": "...",
-    "keywords": [
-        // several specific, distinct keywords that capture key concepts and terminology
-        // Order from most to least important
-        // Don't include keywords that are the name of the speaker or time
-        // At least three keywords, but don't be too redundant.
-    ],
-    "tags": [
-        // several broad categories/themes for classification
-        // Include domain, format, and type tags
-        // At least three tags, but don't be too redundant.
-    ]
+    "keywords": ["kw1", "kw2", "kw3"],
+    "tags": ["tag1", "tag2", "tag3"]
 }"#;
 
 pub const MEMORY_EVOLUTION_PREAMBLE: &str = r#"You are an AI memory evolution agent managing a knowledge graph.
@@ -107,7 +101,21 @@ CRITICAL RULES:
 - Use the exact integer `id` to refer to existing neighbor memories.
 - ONLY output neighbor updates for neighbors that ACTUALLY require modification. If a neighbor does not need its context or tags updated, completely omit it.
 - Within a neighbor update, omit `context` if the existing context should stay unchanged.
-- Format your response exactly according to the provided JSON schema."#;
+
+CRITICAL: Return ONLY a valid JSON object. No markdown, no explanation, no code blocks, no prose.
+The response must be parseable by a JSON parser directly.
+
+Format:
+{
+    "suggested_connections": [1, 2],
+    "updated_new_memory_tags": ["tag1", "tag2"],
+    "neighbor_updates": [
+        {"id": 1, "tags": ["updated-tag"]},
+        {"id": 2, "context": "updated context", "tags": ["tag1", "tag2"]}
+    ]
+}
+
+Only include fields that need to be updated. Empty arrays are valid."#;
 
 pub(crate) struct RigStructuredLlm<M: CompletionModel> {
     model_label: String,
