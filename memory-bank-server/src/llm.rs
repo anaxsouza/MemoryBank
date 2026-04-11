@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use rig::agent::{Agent, AgentBuilder};
 use rig::client::{CompletionClient, Nothing};
-use rig::completion::{CompletionModel, TypedPrompt};
+use rig::completion::{CompletionModel, Prompt, TypedPrompt};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
@@ -196,17 +196,163 @@ where
     }
 }
 
+/// Extract JSON from a string that may contain markdown code blocks or extra text
+fn extract_json_from_response(text: &str) -> Result<&str, LlmError> {
+    // Try to find JSON in markdown code blocks
+    if let Some(start) = text.find("```json") {
+        if let Some(end) = text[start + 7..].find("```") {
+            return Ok(text[start + 7..start + 7 + end].trim());
+        }
+    }
+    // Try to find JSON in generic code blocks
+    if let Some(start) = text.find("```") {
+        if let Some(end) = text[start + 3..].find("```") {
+            let content = text[start + 3..start + 3 + end].trim();
+            if content.starts_with('{') || content.starts_with('[') {
+                return Ok(content);
+            }
+        }
+    }
+    // Find first JSON object or array
+    if let Some(start) = text.find('{') {
+        // Try to find matching closing brace by counting
+        let mut depth = 0;
+        for (i, ch) in text[start..].char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Ok(&text[start..start + i + 1]);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    Err(LlmError::Api("Could not find valid JSON in response".to_string()))
+}
+
+impl RigStructuredLlm<rig::providers::openai::completion::CompletionModel> {
+    /// Analyze memory using regular prompt (not prompt_typed) for compatibility with
+    /// providers that don't support response_format (like NVIDIA NIM)
+    async fn analyze_memory_window_chat(
+        &self,
+        previous_turns: &str,
+        current_turn: &str,
+        timestamp: DateTime<Utc>,
+    ) -> Result<ExtractedMemoryAnalysis, LlmError> {
+        let prompt_content = serde_json::to_string(&MemoryAnalysisPrompt {
+            previous_turns,
+            current_turn,
+            timestamp,
+        })
+        .map_err(|e| LlmError::Api(e.to_string()))?;
+
+        // Use regular prompt instead of prompt_typed to avoid response_format
+        let response = self
+            .analysis_agent
+            .prompt(prompt_content)
+            .await
+            .map_err(|e| {
+                warn!(
+                    model = %self.model_label,
+                    error = %e,
+                    "Memory analysis prompt failed"
+                );
+                LlmError::Api(e.to_string())
+            })?;
+
+        tracing::info!(model = %self.model_label, response = %response, "Raw analysis response from NVIDIA");
+
+        // Extract and parse JSON from response
+        let json_str = extract_json_from_response(&response).map_err(|e| {
+            warn!(
+                model = %self.model_label,
+                response = %response,
+                "Failed to extract JSON from analysis response"
+            );
+            e
+        })?;
+        serde_json::from_str(json_str).map_err(|e| {
+            warn!(
+                model = %self.model_label,
+                error = %e,
+                response = %response,
+                "Failed to parse memory analysis response as JSON"
+            );
+            LlmError::Api(format!("JSON parse error: {e}"))
+        })
+    }
+
+    /// Generate memory evolution using regular prompt for compatibility
+    async fn generate_memory_evolution_chat(
+        &self,
+        context: &str,
+        content: &str,
+        keywords: &[String],
+        neighbors_json: &str,
+    ) -> Result<MemoryEvolution, LlmError> {
+        let prompt = format!(
+            "The NEW memory:\nConversation context: {}\nCurrent memory note: {}\nKeywords: {:?}\n\nThe EXISTING nearest neighbor memories:\n{}",
+            context, content, keywords, neighbors_json
+        );
+
+        // Use regular prompt instead of prompt_typed
+        let response = self
+            .evolve_agent
+            .prompt(prompt)
+            .await
+            .map_err(|e| {
+                warn!(
+                    model = %self.model_label,
+                    error = %e,
+                    "Memory evolution prompt failed"
+                );
+                LlmError::Api(e.to_string())
+            })?;
+
+        tracing::info!(model = %self.model_label, response = %response, "Raw evolution response from NVIDIA");
+
+        // Extract and parse JSON from response
+        let json_str = extract_json_from_response(&response).map_err(|e| {
+            warn!(
+                model = %self.model_label,
+                response = %response,
+                "Failed to extract JSON from evolution response"
+            );
+            e
+        })?;
+        serde_json::from_str(json_str).map_err(|e| {
+            warn!(
+                model = %self.model_label,
+                error = %e,
+                response = %response,
+                "Failed to parse memory evolution response as JSON"
+            );
+            LlmError::Api(format!("JSON parse error: {e}"))
+        })
+    }
+}
+
 type GeminiStructuredLlm = RigStructuredLlm<rig::providers::gemini::CompletionModel>;
 type AnthropicStructuredLlm =
     RigStructuredLlm<rig::providers::anthropic::completion::CompletionModel>;
 type OpenAiStructuredLlm =
     RigStructuredLlm<rig::providers::openai::responses_api::ResponsesCompletionModel>;
+/// OpenAI provider using Chat Completions API (/v1/chat/completions) instead of Responses API.
+/// Used for custom endpoints like NVIDIA NIM, OpenRouter, Groq, etc. that don't support Responses API.
+type OpenAiChatStructuredLlm = RigStructuredLlm<rig::providers::openai::completion::CompletionModel>;
 type OllamaStructuredLlm = RigStructuredLlm<rig::providers::ollama::CompletionModel>;
 
 pub enum LlmClient {
     Gemini(GeminiStructuredLlm),
     Anthropic(AnthropicStructuredLlm),
+    /// OpenAI official API using Responses API (/v1/responses)
     OpenAi(OpenAiStructuredLlm),
+    /// OpenAI-compatible API using Chat Completions API (/v1/chat/completions)
+    /// for providers that don't support the Responses API
+    OpenAiChat(OpenAiChatStructuredLlm),
     Ollama(OllamaStructuredLlm),
 }
 
@@ -219,21 +365,32 @@ impl LlmClient {
     ) -> Result<ExtractedMemoryAnalysis, LlmError> {
         match self {
             Self::Gemini(client) => {
+                tracing::debug!("Using Gemini for analyze_memory_window");
                 client
                     .analyze_memory_window(previous_turns, current_turn, timestamp)
                     .await
             }
             Self::Anthropic(client) => {
+                tracing::debug!("Using Anthropic for analyze_memory_window");
                 client
                     .analyze_memory_window(previous_turns, current_turn, timestamp)
                     .await
             }
             Self::OpenAi(client) => {
+                tracing::debug!("Using OpenAi for analyze_memory_window");
                 client
                     .analyze_memory_window(previous_turns, current_turn, timestamp)
                     .await
             }
+            Self::OpenAiChat(client) => {
+                // Use chat-specific method that doesn't rely on response_format
+                tracing::debug!("Using OpenAiChat for analyze_memory_window");
+                client
+                    .analyze_memory_window_chat(previous_turns, current_turn, timestamp)
+                    .await
+            }
             Self::Ollama(client) => {
+                tracing::debug!("Using Ollama for analyze_memory_window");
                 client
                     .analyze_memory_window(previous_turns, current_turn, timestamp)
                     .await
@@ -264,6 +421,12 @@ impl LlmClient {
                     .generate_memory_evolution(context, content, keywords, neighbors_json)
                     .await
             }
+            Self::OpenAiChat(client) => {
+                // Use chat-specific method that doesn't rely on response_format
+                client
+                    .generate_memory_evolution_chat(context, content, keywords, neighbors_json)
+                    .await
+            }
             Self::Ollama(client) => {
                 client
                     .generate_memory_evolution(context, content, keywords, neighbors_json)
@@ -284,6 +447,7 @@ impl InitializedLlm {
             LlmClient::Gemini(_) => "gemini",
             LlmClient::Anthropic(_) => "anthropic",
             LlmClient::OpenAi(_) => "open-ai",
+            LlmClient::OpenAiChat(_) => "open-ai-chat",
             LlmClient::Ollama(_) => "ollama",
         }
     }
@@ -341,12 +505,23 @@ fn build_openai_llm(api_key: &str, model: &str, base_url: &str) -> Result<LlmCli
             .build()
             .map_err(|e| llm_initialization_error(e.to_string()))?
     };
-    // OpenAI prompt caching is automatic on supported models.
-    Ok(build_openai_responses_llm(
-        &client,
-        model,
-        &format_openai_model_id(model, base_url),
-    ))
+
+    // Use Responses API for official OpenAI endpoint, Chat Completions for custom endpoints
+    // Custom endpoints (NVIDIA NIM, OpenRouter, Groq, etc.) typically only support Chat Completions
+    if base_url == DEFAULT_OPENAI_URL {
+        // OpenAI prompt caching is automatic on supported models.
+        Ok(build_openai_responses_llm(
+            &client,
+            model,
+            &format_openai_model_id(model, base_url),
+        ))
+    } else {
+        Ok(build_openai_chat_llm(
+            &client,
+            model,
+            &format_openai_model_id(model, base_url),
+        ))
+    }
 }
 
 fn build_ollama_llm(url: &str, model: &str) -> Result<LlmClient, AppError> {
@@ -371,6 +546,20 @@ fn build_openai_responses_llm(
 ) -> LlmClient {
     LlmClient::OpenAi(build_rig_structured_llm(
         client.completion_model(model),
+        model_label,
+    ))
+}
+
+/// Build an OpenAI-compatible LLM client using the Chat Completions API.
+/// This is used for custom endpoints (NVIDIA NIM, OpenRouter, Groq, etc.)
+/// that don't support the Responses API.
+fn build_openai_chat_llm(
+    client: &rig::providers::openai::Client,
+    model: &str,
+    model_label: &str,
+) -> LlmClient {
+    LlmClient::OpenAiChat(build_rig_structured_llm(
+        client.completion_model(model).completions_api(),
         model_label,
     ))
 }
@@ -639,6 +828,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn initialize_uses_responses_api_for_default_openai_endpoint() {
+        let InitializedLlm { client, model_id } = super::initialize(LlmProviderConfig::OpenAi {
+            api_key: "test-key".to_string(),
+            model: "gpt-5-mini".to_string(),
+            base_url: DEFAULT_OPENAI_URL.to_string(),
+        })
+        .expect("initialize default openai");
+
+        assert!(matches!(client, LlmClient::OpenAi(_)));
+        assert_eq!(model_id, "OpenAi::gpt-5-mini");
+    }
+
+    #[tokio::test]
+    async fn initialize_uses_chat_completions_api_for_custom_openai_endpoint() {
+        let InitializedLlm { client, model_id } = super::initialize(LlmProviderConfig::OpenAi {
+            api_key: "test-key".to_string(),
+            model: "meta/llama-3.1-8b-instruct".to_string(),
+            base_url: "https://integrate.api.nvidia.com/v1".to_string(),
+        })
+        .expect("initialize custom openai (NVIDIA NIM)");
+
+        // Custom endpoints should use OpenAiChat (Chat Completions API)
+        assert!(matches!(client, LlmClient::OpenAiChat(_)));
+        assert_eq!(
+            model_id,
+            "OpenAi::meta/llama-3.1-8b-instruct@https://integrate.api.nvidia.com/v1"
+        );
+    }
+
+    #[tokio::test]
     async fn initialize_includes_custom_openai_endpoint_in_model_id() {
         let InitializedLlm { client, model_id } = super::initialize(LlmProviderConfig::OpenAi {
             api_key: "test-key".to_string(),
@@ -647,7 +866,7 @@ mod tests {
         })
         .expect("initialize custom openai");
 
-        assert!(matches!(client, LlmClient::OpenAi(_)));
+        assert!(matches!(client, LlmClient::OpenAiChat(_)));
         assert_eq!(
             model_id,
             "OpenAi::qwen3.6-plus-free@https://opencode.ai/zen/v1"
