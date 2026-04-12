@@ -132,7 +132,7 @@ fn retrieve_memory_output_schema() -> Arc<JsonObject> {
 impl ServerHandler for ProxyServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
-            instructions: Some(openclaw_memory_bank_server_instructions().into()),
+            instructions: Some(openclaw_memory_bank_server_instructions()),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             ..Default::default()
         }
@@ -376,7 +376,7 @@ mod tests {
         assert!(instructions.contains("Memory Bank is the primary long-term memory system"));
         assert!(instructions.contains("Prefer retrieve_memory over local workspace profile files"));
 
-        let result = call_proxy(&client.peer(), "editor preference").await;
+        let result = call_proxy(client.peer(), "editor preference").await;
         assert_eq!(result.notes[0].content, "favorite editor: helix");
 
         let _ = client.cancel().await;
@@ -587,7 +587,7 @@ mod tests {
     impl ServerHandler for TestMemoryServer {
         fn get_info(&self) -> ServerInfo {
             ServerInfo {
-                instructions: Some(openclaw_memory_bank_server_instructions().into()),
+                instructions: Some(openclaw_memory_bank_server_instructions()),
                 capabilities: ServerCapabilities::builder().enable_tools().build(),
                 ..Default::default()
             }
