@@ -1,9 +1,32 @@
 {
-  "name": "memory-bank",
-  "version": "0.2.0",
-  "description": "MemoryBank CLI - Local memory service for AI agents with Terminal UI",
+  "name": "@anaxsouza/memory-bank",
+  "version": "0.3.0",
+  "description": "MemoryBank with Terminal UI — Local memory service for AI agents",
   "type": "module",
   "license": "MIT",
+  "author": "Ana Souza <anaxsouza@gmail.com>",
+  "homepage": "https://github.com/anaxsouza/MemoryBank#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anaxsouza/MemoryBank.git"
+  },
+  "bugs": {
+    "url": "https://github.com/anaxsouza/MemoryBank/issues"
+  },
+  "keywords": [
+    "memory",
+    "ai",
+    "agents",
+    "mcp",
+    "claude",
+    "codex",
+    "llm",
+    "sqlite",
+    "embeddings",
+    "terminal",
+    "tui",
+    "cli"
+  ],
   "engines": {
     "node": ">=18"
   },
@@ -16,32 +39,20 @@
     "x64",
     "arm64"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/anaxsouza/MemoryBank.git"
-  },
   "bin": {
     "mb-tui": "./dist/cli.js",
-    "memory-bank": "./dist/cli.js"
+    "memory-bank-tui": "./dist/cli.js"
   },
   "files": [
     "dist/",
     "scripts/",
     "binaries/",
-    "package.json",
     "README.md"
   ],
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
     "build": "cd ../tui && npm run build && cp -r dist/* ../memory-bank/dist/",
     "test": "cd ../tui && npm test"
-  },
-  "optionalDependencies": {
-    "@memory-bank/server-darwin-arm64": "0.2.0",
-    "@memory-bank/server-darwin-x64": "0.2.0",
-    "@memory-bank/server-linux-arm64": "0.2.0",
-    "@memory-bank/server-linux-x64": "0.2.0",
-    "@memory-bank/server-win32-x64": "0.2.0"
   },
   "dependencies": {
     "ink": "^4.1.0",

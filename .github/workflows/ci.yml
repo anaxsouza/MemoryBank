@@ -101,3 +101,23 @@ jobs:
       - name: Build TUI
         run: npm run build
         working-directory: tui
+
+      - name: Copy TUI to memory-bank
+        run: |
+          mkdir -p memory-bank/dist
+          cp -r tui/dist/* memory-bank/dist/
+
+      - name: Validate npm package structure
+        run: |
+          echo "=== Package files ==="
+          ls -la memory-bank/
+          echo ""
+          echo "=== Checking required files ==="
+          test -f memory-bank/package.json && echo "✓ package.json" || echo "✗ package.json missing"
+          test -f memory-bank/README.md && echo "✓ README.md" || echo "✗ README.md missing"
+          test -f memory-bank/dist/cli.js && echo "✓ dist/cli.js" || echo "✗ dist/cli.js missing"
+          test -f memory-bank/scripts/postinstall.js && echo "✓ scripts/postinstall.js" || echo "✗ scripts/postinstall.js missing"
+          test -f memory-bank/.npmignore && echo "✓ .npmignore" || echo "✗ .npmignore missing"
+          echo ""
+          echo "=== Package info ==="
+          cat memory-bank/package.json | grep -E '"name"|"version"'

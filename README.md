@@ -3,7 +3,13 @@
   Memory Bank
 </h1>
 
+[![npm version](https://img.shields.io/npm/v/@anaxsouza/memory-bank.svg)](https://www.npmjs.com/package/@anaxsouza/memory-bank)
+[![CI](https://github.com/anaxsouza/MemoryBank/workflows/CI/badge.svg)](https://github.com/anaxsouza/MemoryBank/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Memory Bank gives agents shared, long-term memory across sessions and across tools.
+
+> This is a fork of [feelingsonice/MemoryBank](https://github.com/feelingsonice/MemoryBank) with added Terminal UI (TUI) support.
 
 It runs locally, stores memory in your own namespaced SQLite databases, and works with Claude Code, Codex, Gemini CLI, OpenCode, and OpenClaw.
 
@@ -22,7 +28,7 @@ The normal install path is the release installer plus `mb setup`.
 Install from GitHub Releases:
 
 ```bash
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/feelingsonice/MemoryBank/main/install.sh)"
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/anaxsouza/MemoryBank/main/install.sh)"
 ```
 
 If you already cloned this repo and just want to use the local installer script:
@@ -30,6 +36,16 @@ If you already cloned this repo and just want to use the local installer script:
 ```bash
 ./install.sh
 ```
+
+### Alternative: Install via npm
+
+For Node.js users, you can install directly from npm:
+
+```bash
+npm install -g @anaxsouza/memory-bank
+```
+
+This installs both the `mb` CLI and the `mb-tui` Terminal UI dashboard.
 
 Then finish setup:
 
@@ -74,6 +90,18 @@ Before answering, call retrieve_memory for my editor preference and tell me what
 ```
 
 If the setup is working, the agent should call `retrieve_memory` and answer using the stored note.
+
+### Terminal UI (TUI)
+
+If you installed via npm, you can use the Terminal UI dashboard:
+
+```bash
+mb-tui                    # Launch the dashboard
+mb-tui --setup            # Run the setup wizard
+mb-tui --url http://localhost:3737 -i 5  # Custom URL and 5s refresh
+```
+
+The TUI shows real-time status, memory statistics, and ingest queue information. It automatically detects if you haven't configured Memory Bank yet and guides you through setup.
 
 ## Supported Agents
 

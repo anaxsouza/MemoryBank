@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-REPO_OWNER="feelingsonice"
+REPO_OWNER="anaxsouza"
 REPO_NAME="MemoryBank"
 RELEASE_BASE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download"
 

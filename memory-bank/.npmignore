@@ -1,0 +1,50 @@
+# Source files not needed in package
+*.test.js
+*.test.ts
+*.test.tsx
+*.spec.js
+*.spec.ts
+
+# Development files
+.eslintrc
+.prettierrc
+tsconfig.json
+
+# Build artifacts (source maps optional)
+# Keep .d.ts for TypeScript users
+# *.d.ts.map
+
+# Tests
+test/
+tests/
+__tests__/
+*.test.*
+
+# CI
+.github/
+.travis.yml
+.gitlab-ci.yml
+
+# Documentation (keep README.md)
+docs/
+*.md
+!README.md
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# npm
+node_modules/
+package-lock.json
+npm-debug.log*

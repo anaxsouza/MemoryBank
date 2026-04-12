@@ -5,7 +5,7 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, copyFileSync, chmodSync, writeFileSync, appendFileSync } from 'fs';
+import { existsSync, mkdirSync, copyFileSync, chmodSync, writeFileSync, readFileSync, appendFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
@@ -102,7 +102,18 @@ function installBinary(sourcePath, targetName) {
   }
 }
 
+function isAlreadyInPath() {
+  const currentPath = process.env.PATH || '';
+  return currentPath.includes(userBinDir);
+}
+
 function addToPath() {
+  // Check if already in PATH
+  if (isAlreadyInPath()) {
+    log('  ✓ PATH already configured');
+    return true;
+  }
+  
   const shell = process.env.SHELL || '';
   const home = homedir();
   let profileFile = null;
@@ -127,6 +138,15 @@ function addToPath() {
   }
   
   if (profileFile && existsSync(dirname(profileFile))) {
+    // Check if already in profile file to avoid duplication
+    if (existsSync(profileFile)) {
+      const profileContent = readFileSync(profileFile, 'utf8');
+      if (profileContent.includes(userBinDir)) {
+        log('  ✓ PATH already in shell profile');
+        return true;
+      }
+    }
+    
     const pathLine = `\n# MemoryBank PATH\nexport PATH="${userBinDir}:$PATH"\n`;
     try {
       appendFileSync(profileFile, pathLine);
@@ -216,6 +236,7 @@ async function main() {
   log('  mb setup        # Command-line setup wizard');
   log('  mb status       # Check server status');
   log('');
+}
 
 main().catch((error) => {
   console.error('[memory-bank] Fatal error:', error);
