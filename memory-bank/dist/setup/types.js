@@ -1,0 +1,168 @@
+/**
+ * Setup Wizard types and state management
+ *
+ * Defines the state machine for the setup wizard flow.
+ */
+/** Provider-specific model lists */
+export const PROVIDER_MODELS = {
+    anthropic: [
+        { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', description: 'Fast and capable' },
+        { id: 'claude-opus-4', name: 'Claude Opus 4', description: 'Most powerful' },
+        { id: 'claude-haiku-4', name: 'Claude Haiku 4', description: 'Fast and affordable' },
+    ],
+    openai: [
+        { id: 'gpt-4o', name: 'GPT-4o', description: 'Most capable multimodal' },
+        { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Fast and affordable' },
+        { id: 'o1-mini', name: 'o1-mini', description: 'Reasoning optimized' },
+    ],
+    'openai-compatible': [
+        { id: 'custom', name: 'Custom Model', description: 'Enter your model ID' },
+    ],
+    ollama: [
+        { id: 'llama3.2', name: 'Llama 3.2', description: 'Meta Llama 3.2' },
+        { id: 'mistral', name: 'Mistral', description: 'Mistral 7B' },
+        { id: 'custom', name: 'Custom Model', description: 'Enter Ollama model name' },
+    ],
+    gemini: [
+        { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Most capable' },
+        { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Fast and efficient' },
+    ],
+};
+/** Provider configuration metadata */
+export const PROVIDER_INFO = {
+    anthropic: {
+        name: 'Anthropic',
+        description: 'Claude models via Anthropic API',
+        requiresKey: true,
+    },
+    openai: {
+        name: 'OpenAI',
+        description: 'GPT models via OpenAI API',
+        requiresKey: true,
+    },
+    'openai-compatible': {
+        name: 'OpenAI-Compatible',
+        description: 'Custom endpoint (NVIDIA, Groq, OpenRouter, etc.)',
+        requiresKey: true,
+        requiresUrl: true,
+    },
+    ollama: {
+        name: 'Ollama',
+        description: 'Local models via Ollama',
+        requiresKey: false,
+        requiresUrl: true,
+    },
+    gemini: {
+        name: 'Google Gemini',
+        description: 'Gemini models via Google AI',
+        requiresKey: true,
+    },
+};
+/** Agent definitions */
+export const AGENTS = [
+    { kind: 'claude_code', name: 'Claude Code', description: 'Anthropic\'s CLI coding assistant', detected: false },
+    { kind: 'codex', name: 'Codex CLI', description: 'OpenAI\'s CLI coding assistant', detected: false },
+    { kind: 'gemini_cli', name: 'Gemini CLI', description: 'Google\'s CLI coding assistant', detected: false },
+    { kind: 'opencode', name: 'OpenCode', description: 'Community AI coding assistant', detected: false },
+    { kind: 'openclaw', name: 'OpenClaw', description: 'Open-source coding assistant', detected: false },
+];
+/** Environment variable names for each provider */
+export const PROVIDER_ENV_VARS = {
+    anthropic: 'ANTHROPIC_API_KEY',
+    openai: 'OPENAI_API_KEY',
+    'openai-compatible': 'OPENAI_API_KEY',
+    ollama: '', // No key needed
+    gemini: 'GOOGLE_API_KEY',
+};
+/** Default values */
+export const DEFAULTS = {
+    namespace: 'default',
+    port: 3737,
+    ollamaUrl: 'http://127.0.0.1:11434',
+};
+/** Create initial wizard state */
+export function createInitialState() {
+    return {
+        currentStep: 'welcome',
+        plan: {
+            namespace: DEFAULTS.namespace,
+            port: DEFAULTS.port,
+            autostart: true,
+            selectedAgents: [],
+        },
+        history: [],
+        isApplying: false,
+    };
+}
+/** Step order for navigation */
+export const STEP_ORDER = [
+    'welcome',
+    'provider',
+    'model',
+    'secret',
+    'namespace',
+    'agents',
+    'review',
+    'applying',
+    'complete',
+];
+/** Get next step */
+export function getNextStep(current) {
+    const idx = STEP_ORDER.indexOf(current);
+    if (idx === -1 || idx >= STEP_ORDER.length - 1)
+        return null;
+    return STEP_ORDER[idx + 1];
+}
+/** Get previous step */
+export function getPreviousStep(current) {
+    const idx = STEP_ORDER.indexOf(current);
+    if (idx <= 0)
+        return null;
+    return STEP_ORDER[idx - 1];
+}
+/** Wizard state reducer */
+export function wizardReducer(state, action) {
+    switch (action.type) {
+        case 'NEXT': {
+            const nextStep = getNextStep(state.currentStep);
+            if (!nextStep)
+                return state;
+            return {
+                ...state,
+                currentStep: nextStep,
+                plan: { ...state.plan, ...action.payload },
+                history: [...state.history, state.currentStep],
+                error: undefined,
+            };
+        }
+        case 'BACK': {
+            const prevStep = getPreviousStep(state.currentStep);
+            if (!prevStep)
+                return state;
+            return {
+                ...state,
+                currentStep: prevStep,
+                history: state.history.slice(0, -1),
+                error: undefined,
+            };
+        }
+        case 'GO_TO':
+            return {
+                ...state,
+                currentStep: action.step,
+                plan: { ...state.plan, ...action.payload },
+                error: undefined,
+            };
+        case 'SET_ERROR':
+            return { ...state, error: action.error };
+        case 'CLEAR_ERROR':
+            return { ...state, error: undefined };
+        case 'START_APPLYING':
+            return { ...state, isApplying: true };
+        case 'COMPLETE':
+            return { ...state, isApplying: false, currentStep: 'complete' };
+        default:
+            return state;
+    }
+}
+//# sourceMappingURL=types.js.map

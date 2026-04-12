@@ -13,6 +13,15 @@ export function getConfig() {
                 type: 'number',
                 short: 'i',
             },
+            setup: {
+                type: 'boolean',
+                short: 's',
+                default: false,
+            },
+            welcome: {
+                type: 'boolean',
+                default: false,
+            },
         },
         help: `
     Usage
@@ -21,6 +30,8 @@ export function getConfig() {
     Options
       --url, -u       Memory Bank server URL (default: ${DEFAULT_URL})
       --interval, -i  Refresh interval in seconds (default: ${DEFAULT_INTERVAL})
+      --setup, -s     Force setup wizard (ignore existing config)
+      --welcome       Show welcome/setup wizard on startup
       --help          Show help
       --version       Show version
 
@@ -28,6 +39,7 @@ export function getConfig() {
       $ mb-tui
       $ mb-tui --url http://localhost:8080
       $ mb-tui -i 5
+      $ mb-tui --setup    # Re-run setup wizard
       
     Environment Variables
       MEMORY_BANK_URL    Server URL (overridden by --url flag)
@@ -36,9 +48,11 @@ export function getConfig() {
     // Priority: CLI flag > env var > default
     const url = cli.flags.url ?? process.env.MEMORY_BANK_URL ?? DEFAULT_URL;
     const interval = cli.flags.interval ?? DEFAULT_INTERVAL;
+    const forceSetup = cli.flags.setup || cli.flags.welcome || false;
     return {
-        url: url.replace(/\/$/, ''), // Remove trailing slash
+        url: url.replace(/\/+$/, ''), // Remove trailing slashes
         interval: Math.max(1, interval), // Minimum 1 second
+        forceSetup,
     };
 }
 //# sourceMappingURL=config.js.map

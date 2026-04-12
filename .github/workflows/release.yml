@@ -105,18 +105,23 @@ jobs:
           - runner: macos-15
             target: aarch64-apple-darwin
             artifact_name: memory-bank-server-darwin-arm64
+            platform_key: darwin-arm64
           - runner: macos-14
             target: x86_64-apple-darwin
             artifact_name: memory-bank-server-darwin-x64
+            platform_key: darwin-x64
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             artifact_name: memory-bank-server-linux-x64
+            platform_key: linux-x64
           - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             artifact_name: memory-bank-server-linux-arm64
+            platform_key: linux-arm64
           - runner: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: memory-bank-server-win32-x64.exe
+            platform_key: win32-x64
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
@@ -133,7 +138,7 @@ jobs:
       - name: Build release binaries
         run: cargo build --workspace --release --target ${{ matrix.target }}
 
-      - name: Prepare Binary
+      - name: Prepare Binaries
         shell: bash
         run: |
           mkdir -p dist/binaries
@@ -141,15 +146,22 @@ jobs:
           if [[ "${{ matrix.target }}" == *"windows"* ]]; then
             EXT=".exe"
           fi
-          cp "target/${{ matrix.target }}/release/memory-bank-server${EXT}" \
-             "dist/binaries/${{ matrix.artifact_name }}"
-          chmod +x "dist/binaries/${{ matrix.artifact_name }}"
+          TARGET="${{ matrix.target }}"
+          PLATFORM_KEY="${{ matrix.platform_key }}"
+          
+          # Copy all binaries with platform-specific names
+          cp "target/${TARGET}/release/memory-bank-server${EXT}" "dist/binaries/memory-bank-server-${PLATFORM_KEY}${EXT}"
+          cp "target/${TARGET}/release/mb${EXT}" "dist/binaries/mb-${PLATFORM_KEY}${EXT}"
+          cp "target/${TARGET}/release/memory-bank-hook${EXT}" "dist/binaries/memory-bank-hook-${PLATFORM_KEY}${EXT}" 2>/dev/null || true
+          cp "target/${TARGET}/release/memory-bank-mcp-proxy${EXT}" "dist/binaries/memory-bank-mcp-proxy-${PLATFORM_KEY}${EXT}" 2>/dev/null || true
+          
+          chmod +x dist/binaries/*${EXT} 2>/dev/null || true
 
-      - name: Upload Binary Artifact
+      - name: Upload Binary Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: dist/binaries/${{ matrix.artifact_name }}
+          name: binaries-${{ matrix.platform_key }}
+          path: dist/binaries/*
 
       - name: Package release tarball
         if: runner.os != 'Windows'
@@ -215,7 +227,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: binaries
-          pattern: memory-bank-server-*
+          pattern: binaries-*
           merge-multiple: true
 
       - name: Generate checksums
@@ -241,7 +253,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -eu
-          gh release upload "${TAG}" dist-artifacts/memory-bank-*.tar.gz dist-artifacts/SHA256SUMS binaries/memory-bank-server-* --clobber || true
+          gh release upload "${TAG}" dist-artifacts/memory-bank-*.tar.gz dist-artifacts/SHA256SUMS binaries/* --clobber || true
 
       # ========================================
       # Publish to npm
@@ -262,8 +274,15 @@ jobs:
           # Copy TUI dist
           cp -r tui-dist/* memory-bank-pkg/dist/ 2>/dev/null || true
           
-          # Copy binaries
+          # Copy all binaries (server, mb, hook, mcp-proxy)
           cp binaries/memory-bank-server-* memory-bank-pkg/binaries/ 2>/dev/null || true
+          cp binaries/mb-* memory-bank-pkg/binaries/ 2>/dev/null || true
+          cp binaries/memory-bank-hook-* memory-bank-pkg/binaries/ 2>/dev/null || true
+          cp binaries/memory-bank-mcp-proxy-* memory-bank-pkg/binaries/ 2>/dev/null || true
+          
+          # List what we have
+          echo "Binaries in package:"
+          ls -la memory-bank-pkg/binaries/
           
           # Copy scripts
           cp memory-bank/scripts/*.js memory-bank-pkg/scripts/

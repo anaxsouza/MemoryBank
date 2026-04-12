@@ -5,4 +5,10 @@ import { getConfig } from './config.js';
 
 const config = getConfig();
 
-render(<App url={config.url} interval={config.interval} />);
+render(
+  <App 
+    url={config.url} 
+    interval={config.interval} 
+    forceSetup={config.forceSetup}
+  />
+);
