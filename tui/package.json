@@ -1,0 +1,41 @@
+{
+  "name": "@memory-bank/tui",
+  "version": "0.1.0",
+  "description": "Terminal UI for MemoryBank - Local memory service for AI agents",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anaxsouza/MemoryBank.git"
+  },
+  "bin": {
+    "mb-tui": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npm run clean && tsc && npm run add-shebang",
+    "clean": "rm -rf dist",
+    "add-shebang": "echo '#!/usr/bin/env node' | cat - dist/cli.js > temp && mv temp dist/cli.js && chmod +x dist/cli.js",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ink": "^4.1.0",
+    "meow": "^11.0.0",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "ink-testing-library": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}

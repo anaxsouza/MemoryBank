@@ -1,4 +1,5 @@
 mod actor;
+mod api;
 pub mod config;
 mod db;
 mod encoder;
@@ -14,13 +15,15 @@ mod memory_window;
 #[cfg(test)]
 mod retrieval_eval;
 mod startup_state;
+mod ui;
 
 use crate::actor::MemoryActor;
 use crate::config::ServeConfig;
-use crate::db::SqliteRuntime;
+use crate::db::{MemoryDb, SqliteRuntime};
 use crate::http_server::{HealthResponse, HttpServer};
 use crate::ingest::IngestService;
 use crate::startup_state::StartupStateTracker;
+use std::sync::Arc;
 use tracing::info;
 
 pub async fn run(config: ServeConfig) -> Result<(), error::AppError> {
@@ -78,7 +81,7 @@ pub async fn run(config: ServeConfig) -> Result<(), error::AppError> {
         "Opening memory database",
     );
     let startup_state = StartupStateTracker::new(dirs.startup_state.clone(), namespace.to_string());
-    let db = db::MemoryDb::open_with_runtime(
+    let db = MemoryDb::open_with_runtime(
         sqlite_runtime.clone(),
         &dirs.db,
         &llm.model_id,
@@ -87,6 +90,19 @@ pub async fn run(config: ServeConfig) -> Result<(), error::AppError> {
         Some(&startup_state),
     )
     .await?;
+
+    // Create a separate MemoryDb instance for the API (shares the same runtime/pool)
+    let db_for_api = Arc::new(
+        MemoryDb::open_with_runtime(
+            sqlite_runtime.clone(),
+            &dirs.db,
+            &llm.model_id,
+            &encoder.model_id,
+            &encoder.client,
+            None, // No startup state needed for read-only API
+        )
+        .await?,
+    );
 
     let llm_provider_name = llm.provider_name().to_string();
     let encoder_provider_name = encoder.provider_name().to_string();
@@ -116,7 +132,15 @@ pub async fn run(config: ServeConfig) -> Result<(), error::AppError> {
         version: env!("CARGO_PKG_VERSION"),
     };
 
-    let server =
-        HttpServer::bind(port, health, memory_handle, ingest, logging_state.sender()).await?;
+    let server = HttpServer::bind(
+        port,
+        health,
+        memory_handle,
+        db_for_api,
+        dirs.db.clone(),
+        ingest,
+        logging_state.sender(),
+    )
+    .await?;
     server.run().await
 }

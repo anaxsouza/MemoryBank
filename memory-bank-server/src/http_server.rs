@@ -1,4 +1,5 @@
 use std::net::{Ipv4Addr, SocketAddr};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::extract::rejection::JsonRejection;
@@ -18,6 +19,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
 use crate::actor::MemoryHandle;
+use crate::api::{self, ApiState};
+use crate::db::MemoryDb;
 use crate::error::AppError;
 use crate::ingest::{IngestError, IngestService};
 use crate::mcp_server::McpServer;
@@ -34,12 +37,14 @@ impl HttpServer {
         port: u16,
         health: HealthResponse,
         memory: MemoryHandle,
+        db: Arc<MemoryDb>,
+        db_path: PathBuf,
         ingest: IngestService,
         log_tx: broadcast::Sender<LoggingMessageNotificationParam>,
     ) -> Result<Self, AppError> {
         let requested_bind_addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
         let shutdown = CancellationToken::new();
-        let app = build_app(health, memory, ingest, log_tx, &shutdown);
+        let app = build_app(health, memory, db, db_path, ingest, log_tx, &shutdown);
         let listener = TcpListener::bind(requested_bind_addr).await.map_err(|e| {
             AppError::HttpServer(format!("Failed to bind to {}: {}", requested_bind_addr, e))
         })?;
@@ -82,6 +87,7 @@ impl HttpServer {
             bind_addr = %self.bind_addr,
             mcp_endpoint = %format!("http://{}/mcp", self.bind_addr),
             ingest_endpoint = %format!("http://{}/ingest", self.bind_addr),
+            api_endpoint = %format!("http://{}/api/status", self.bind_addr),
             "HTTP server listening",
         );
     }
@@ -90,11 +96,24 @@ impl HttpServer {
 fn build_app(
     health: HealthResponse,
     memory: MemoryHandle,
+    db: Arc<MemoryDb>,
+    db_path: PathBuf,
     ingest: IngestService,
     log_tx: broadcast::Sender<LoggingMessageNotificationParam>,
     shutdown: &CancellationToken,
 ) -> axum::Router {
-    let state = HttpState { health, ingest };
+    let http_state = HttpState {
+        health: health.clone(),
+        ingest: ingest.clone(),
+    };
+
+    let api_state = ApiState {
+        health: health.clone(),
+        db,
+        ingest: ingest.clone(),
+        db_path,
+    };
+
     let mcp_service = StreamableHttpService::new(
         move || Ok(McpServer::new(memory.clone(), log_tx.clone())),
         Arc::new(LocalSessionManager::default()),
@@ -103,20 +122,26 @@ fn build_app(
             ..Default::default()
         },
     );
+
     let ingest_routes = axum::Router::new()
         .route("/ingest", post(handle_ingest))
         .route("/healthz", get(handle_healthz))
-        .with_state(state)
+        .with_state(http_state)
         .layer(DefaultBodyLimit::disable());
+
+    let api_routes = axum::Router::new()
+        .route("/api/status", get(api::handle_status))
+        .with_state(api_state);
 
     axum::Router::new()
         .nest_service("/mcp", mcp_service)
         .merge(ingest_routes)
+        .merge(api_routes)
         .fallback(|| async { StatusCode::NOT_FOUND })
 }
 
 #[derive(Clone)]
-struct HttpState {
+pub(crate) struct HttpState {
     health: HealthResponse,
     ingest: IngestService,
 }
@@ -199,7 +224,7 @@ async fn shutdown_signal(shutdown: CancellationToken) {
 mod tests {
     use super::{HealthResponse, HttpServer, build_app};
     use crate::actor::{MemoryHandle, TestStoreTurnRequest};
-    use crate::db::SqliteRuntime;
+    use crate::db::{MemoryDb, SqliteRuntime};
     use crate::ingest::IngestService;
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
@@ -211,6 +236,7 @@ mod tests {
     use serde_json::json;
     use sqlx::SqlitePool;
     use std::path::PathBuf;
+    use std::sync::Arc;
     use std::sync::atomic::{AtomicU64, Ordering};
     use tokio::sync::{broadcast, mpsc};
     use tokio::task::JoinHandle;
@@ -587,7 +613,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn root_returns_not_found() {
+    async fn root_returns_ui_html() {
         let app = app().await;
 
         let response = app
@@ -595,6 +621,7 @@ mod tests {
             .await
             .expect("response");
 
+        // Root returns 404 (no web UI - use TUI instead)
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
@@ -636,9 +663,16 @@ mod tests {
         let (log_tx, _) = broadcast::channel::<LoggingMessageNotificationParam>(8);
         let shutdown = CancellationToken::new();
         let memory = MemoryHandle::closed_for_tests();
-        let ingest = IngestService::open(&test_db_path(), memory.clone(), 0)
+        let db_path = test_db_path();
+        let ingest = IngestService::open(&db_path, memory.clone(), 0)
             .await
             .expect("ingest service");
+        // Create an in-memory MemoryDb for tests
+        let db = Arc::new(
+            MemoryDb::open_in_memory_for_tests(384)
+                .await
+                .expect("memory db"),
+        );
         let health = HealthResponse {
             ok: true,
             namespace: "default".to_string(),
@@ -649,7 +683,7 @@ mod tests {
             encoder_model_id: Some("FastEmbed::default".to_string()),
             version: "test",
         };
-        build_app(health, memory, ingest, log_tx, &shutdown)
+        build_app(health, memory, db, db_path, ingest, log_tx, &shutdown)
     }
 
     struct TestHttpServer {
@@ -670,7 +704,14 @@ mod tests {
 
     async fn spawn_http_server(memory: MemoryHandle, ingest: IngestService) -> TestHttpServer {
         let (log_tx, _) = broadcast::channel::<LoggingMessageNotificationParam>(8);
-        let server = HttpServer::bind(0, test_health(), memory, ingest, log_tx)
+        let db_path = test_db_path();
+        // Create an in-memory MemoryDb for tests
+        let db = Arc::new(
+            MemoryDb::open_in_memory_for_tests(384)
+                .await
+                .expect("memory db"),
+        );
+        let server = HttpServer::bind(0, test_health(), memory, db, db_path, ingest, log_tx)
             .await
             .expect("bind http server");
         let base_url = format!("http://{}", server.bind_addr);

@@ -268,6 +268,17 @@ impl IngestService {
             finalized: staged.finalized,
         })
     }
+
+    /// Returns the count of ingest turns grouped by status.
+    /// Returns Vec of (status_label, count) tuples.
+    pub async fn count_turns_by_status(&self) -> Result<Vec<(String, i64)>, sqlx::Error> {
+        let rows: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT status, COUNT(*) FROM ingest_turns GROUP BY status ORDER BY status"
+        )
+        .fetch_all(self.store.pool())
+        .await?;
+        Ok(rows)
+    }
 }
 
 #[derive(Debug, Error)]

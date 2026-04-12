@@ -2161,7 +2161,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "memory-bank-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dirs",
  "serde",
@@ -2174,7 +2174,7 @@ dependencies = [
 
 [[package]]
 name = "memory-bank-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "clap",
@@ -2194,7 +2194,7 @@ dependencies = [
 
 [[package]]
 name = "memory-bank-hook"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "clap",
@@ -2211,7 +2211,7 @@ dependencies = [
 
 [[package]]
 name = "memory-bank-mcp-proxy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "chrono",
@@ -2231,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "memory-bank-protocol"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "schemars",
@@ -2241,7 +2241,7 @@ dependencies = [
 
 [[package]]
 name = "memory-bank-server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "axum",

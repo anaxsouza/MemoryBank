@@ -374,6 +374,61 @@ impl MemoryDb {
     pub(crate) fn pool_for_tests(&self) -> &SqlitePool {
         self.runtime.pool()
     }
+
+    // --- Statistics methods for UI ---
+
+    /// Returns the total count of memories in the database.
+    pub async fn count_memories(&self) -> Result<i64, sqlx::Error> {
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM memories")
+            .fetch_one(self.runtime.pool())
+            .await
+    }
+
+    /// Returns the timestamp range of all memories (earliest, latest).
+    pub async fn memory_timestamp_range(&self) -> Result<Option<(String, String)>, sqlx::Error> {
+        let row: Option<(Option<String>, Option<String>)> =
+            sqlx::query_as("SELECT MIN(timestamp), MAX(timestamp) FROM memories")
+                .fetch_optional(self.runtime.pool())
+                .await?;
+        Ok(row.and_then(|(min, max)| min.zip(max)))
+    }
+
+    /// Returns all unique tags across all memories.
+    pub async fn unique_tags(&self) -> Result<Vec<String>, sqlx::Error> {
+        let rows: Vec<(String,)> =
+            sqlx::query_as("SELECT DISTINCT tags FROM memories WHERE tags != '[]'")
+                .fetch_all(self.runtime.pool())
+                .await?;
+        let mut unique = std::collections::HashSet::new();
+        for (json_tags,) in rows {
+            let tags = parse_json_vec(&json_tags);
+            unique.extend(tags);
+        }
+        let mut result: Vec<String> = unique.into_iter().collect();
+        result.sort();
+        Ok(result)
+    }
+
+    /// Returns all unique keywords across all memories.
+    pub async fn unique_keywords(&self) -> Result<Vec<String>, sqlx::Error> {
+        let rows: Vec<(String,)> =
+            sqlx::query_as("SELECT DISTINCT keywords FROM memories WHERE keywords != '[]'")
+                .fetch_all(self.runtime.pool())
+                .await?;
+        let mut unique = std::collections::HashSet::new();
+        for (json_keywords,) in rows {
+            let keywords = parse_json_vec(&json_keywords);
+            unique.extend(keywords);
+        }
+        let mut result: Vec<String> = unique.into_iter().collect();
+        result.sort();
+        Ok(result)
+    }
+
+    /// Returns the file size of the database in bytes.
+    pub fn db_file_size(&self, db_path: &Path) -> Result<u64, std::io::Error> {
+        std::fs::metadata(db_path).map(|m| m.len())
+    }
 }
 
 // --- Bootstrap flow used by `MemoryDb::open` ---
