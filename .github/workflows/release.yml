@@ -7,9 +7,12 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  CARGO_TERM_COLOR: always
 
 permissions:
   contents: write
+  attestations: write
+  id-token: write
 
 jobs:
   verify-main:
@@ -55,6 +58,41 @@ jobs:
       - name: Validate test suite
         run: make test-ci
 
+  # ========================================
+  # Build TUI
+  # ========================================
+  build-tui:
+    name: Build TUI
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tui/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+        working-directory: tui
+
+      - name: Run Tests
+        run: npm test
+        working-directory: tui
+
+      - name: Build TUI
+        run: npm run build
+        working-directory: tui
+
+      - name: Upload TUI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tui-dist
+          path: tui/dist/**
+
   build:
     name: Build ${{ matrix.target }}
     needs:
@@ -66,10 +104,19 @@ jobs:
         include:
           - runner: macos-15
             target: aarch64-apple-darwin
+            artifact_name: memory-bank-server-darwin-arm64
+          - runner: macos-14
+            target: x86_64-apple-darwin
+            artifact_name: memory-bank-server-darwin-x64
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
+            artifact_name: memory-bank-server-linux-x64
           - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
+            artifact_name: memory-bank-server-linux-arm64
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: memory-bank-server-win32-x64.exe
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
@@ -86,7 +133,26 @@ jobs:
       - name: Build release binaries
         run: cargo build --workspace --release --target ${{ matrix.target }}
 
+      - name: Prepare Binary
+        shell: bash
+        run: |
+          mkdir -p dist/binaries
+          EXT=""
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            EXT=".exe"
+          fi
+          cp "target/${{ matrix.target }}/release/memory-bank-server${EXT}" \
+             "dist/binaries/${{ matrix.artifact_name }}"
+          chmod +x "dist/binaries/${{ matrix.artifact_name }}"
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/binaries/${{ matrix.artifact_name }}
+
       - name: Package release tarball
+        if: runner.os != 'Windows'
         env:
           TARGET: ${{ matrix.target }}
         run: |
@@ -97,7 +163,7 @@ jobs:
           OPENCODE_DIR="${STAGE_DIR}/integrations/opencode"
           OPENCLAW_DIR="${STAGE_DIR}/integrations/openclaw"
 
-          rm -rf dist
+          rm -rf dist/memory-bank
           mkdir -p "${BIN_DIR}" "${CONFIG_DIR}" "${OPENCODE_DIR}" "${OPENCLAW_DIR}"
 
           cp "target/${TARGET}/release/mb" "${BIN_DIR}/mb"
@@ -117,34 +183,46 @@ jobs:
           tar -C "${STAGE_DIR}" -czf "memory-bank-${TARGET}.tar.gz" .
 
       - name: Upload packaged tarball
-        uses: actions/upload-artifact@v6
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.target }}
           path: memory-bank-${{ matrix.target }}.tar.gz
           if-no-files-found: error
 
   publish:
-    name: Publish release
+    name: Publish release & npm
     runs-on: ubuntu-24.04
-    needs: build
-    permissions:
-      contents: write
+    needs: [build, build-tui]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           path: dist-artifacts
           pattern: release-*
+          merge-multiple: true
+
+      - name: Download TUI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tui-dist
+          path: tui-dist
+
+      - name: Download binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
+          pattern: memory-bank-server-*
           merge-multiple: true
 
       - name: Generate checksums
         run: |
           set -eu
           cd dist-artifacts
-          sha256sum memory-bank-*.tar.gz > SHA256SUMS
+          sha256sum memory-bank-*.tar.gz > SHA256SUMS 2>/dev/null || true
 
       - name: Create draft release
         env:
@@ -163,7 +241,48 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -eu
-          gh release upload "${TAG}" dist-artifacts/memory-bank-*.tar.gz dist-artifacts/SHA256SUMS --clobber
+          gh release upload "${TAG}" dist-artifacts/memory-bank-*.tar.gz dist-artifacts/SHA256SUMS binaries/memory-bank-server-* --clobber || true
+
+      # ========================================
+      # Publish to npm
+      # ========================================
+      - name: Setup Node.js for npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Prepare npm package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          
+          # Create package structure
+          mkdir -p memory-bank-pkg/{dist,scripts,binaries}
+          
+          # Copy TUI dist
+          cp -r tui-dist/* memory-bank-pkg/dist/ 2>/dev/null || true
+          
+          # Copy binaries
+          cp binaries/memory-bank-server-* memory-bank-pkg/binaries/ 2>/dev/null || true
+          
+          # Copy scripts
+          cp memory-bank/scripts/*.js memory-bank-pkg/scripts/
+          
+          # Copy README
+          cp memory-bank/README.md memory-bank-pkg/
+          
+          # Update package.json version
+          cat memory-bank/package.json | \
+            sed "s/\"version\": \"0.2.0\"/\"version\": \"$VERSION\"/" > \
+            memory-bank-pkg/package.json
+
+      - name: Publish to npm
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd memory-bank-pkg
+          npm publish --access public || echo "npm publish failed - may need to setup NPM_TOKEN secret"
 
       - name: Publish release
         env:

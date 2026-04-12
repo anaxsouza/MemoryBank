@@ -1,31 +1,103 @@
 name: CI
 
 on:
+  push:
+    branches: [ main, develop ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 env:
+  CARGO_TERM_COLOR: always
+  FORCE_COLOR: 1
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  check:
+  # ========================================
+  # Rust Tests & Checks
+  # ========================================
+  rust-tests:
+    name: Rust Tests
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check Formatting
+        run: cargo fmt --check
+
+      - name: Check Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run Tests
+        run: cargo test --workspace
+
+  # ========================================
+  # TUI Tests
+  # ========================================
+  tui-tests:
+    name: TUI Tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tui/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+        working-directory: tui
+
+      - name: Run Tests
+        run: npm test
+        working-directory: tui
+
+      - name: Type Check
+        run: npm run typecheck
+        working-directory: tui
+
+  # ========================================
+  # Build Check
+  # ========================================
+  build-check:
+    name: Build Check
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Rust cache
+      - name: Rust Cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Format
-        run: make fmt-check
+      - name: Build Rust
+        run: cargo build --workspace --release
 
-      - name: Cargo check
-        run: make check
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tui/package-lock.json
 
-      - name: Validate test suite
-        run: make test-ci
+      - name: Install TUI Dependencies
+        run: npm ci
+        working-directory: tui
+
+      - name: Build TUI
+        run: npm run build
+        working-directory: tui

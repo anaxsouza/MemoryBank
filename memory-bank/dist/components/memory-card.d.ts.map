@@ -1,0 +1,1 @@
+{"version":3,"file":"memory-card.d.ts","sourceRoot":"","sources":["../../source/components/memory-card.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAK,MAAM,OAAO,CAAC;AAE1B,OAAO,KAAK,EAAE,WAAW,EAAE,MAAM,wBAAwB,CAAC;AAE1D,UAAU,eAAe;IACvB,QAAQ,EAAE,WAAW,CAAC;CACvB;AAYD,wBAAgB,UAAU,CAAC,EAAE,QAAQ,EAAE,EAAE,eAAe,qBA+DvD"}

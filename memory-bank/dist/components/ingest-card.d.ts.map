@@ -1,0 +1,1 @@
+{"version":3,"file":"ingest-card.d.ts","sourceRoot":"","sources":["../../source/components/ingest-card.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAK,MAAM,OAAO,CAAC;AAE1B,OAAO,KAAK,EAAE,WAAW,EAAE,MAAM,wBAAwB,CAAC;AAE1D,UAAU,eAAe;IACvB,MAAM,EAAE,WAAW,CAAC;CACrB;AAYD,wBAAgB,UAAU,CAAC,EAAE,MAAM,EAAE,EAAE,eAAe,qBAyCrD"}
