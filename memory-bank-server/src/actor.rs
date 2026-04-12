@@ -1074,6 +1074,7 @@ mod tests {
     }
 
     #[derive(Clone, Default)]
+    #[allow(clippy::type_complexity)]
     struct FakeEncoder {
         encode_results: Arc<Mutex<Vec<Result<Vec<Vec<f32>>, EncoderError>>>>,
         encode_memory_results: Arc<Mutex<Vec<Result<Vec<f32>, EncoderError>>>>,

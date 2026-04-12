@@ -207,18 +207,18 @@ where
 /// Extract JSON from a string that may contain markdown code blocks or extra text
 fn extract_json_from_response(text: &str) -> Result<&str, LlmError> {
     // Try to find JSON in markdown code blocks
-    if let Some(start) = text.find("```json") {
-        if let Some(end) = text[start + 7..].find("```") {
-            return Ok(text[start + 7..start + 7 + end].trim());
-        }
+    if let Some(start) = text.find("```json")
+        && let Some(end) = text[start + 7..].find("```")
+    {
+        return Ok(text[start + 7..start + 7 + end].trim());
     }
     // Try to find JSON in generic code blocks
-    if let Some(start) = text.find("```") {
-        if let Some(end) = text[start + 3..].find("```") {
-            let content = text[start + 3..start + 3 + end].trim();
-            if content.starts_with('{') || content.starts_with('[') {
-                return Ok(content);
-            }
+    if let Some(start) = text.find("```")
+        && let Some(end) = text[start + 3..].find("```")
+    {
+        let content = text[start + 3..start + 3 + end].trim();
+        if content.starts_with('{') || content.starts_with('[') {
+            return Ok(content);
         }
     }
     // Find first JSON object or array
@@ -276,13 +276,12 @@ impl RigStructuredLlm<rig::providers::openai::completion::CompletionModel> {
         tracing::info!(model = %self.model_label, response = %response, "Raw analysis response from NVIDIA");
 
         // Extract and parse JSON from response
-        let json_str = extract_json_from_response(&response).map_err(|e| {
+        let json_str = extract_json_from_response(&response).inspect_err(|_e| {
             warn!(
                 model = %self.model_label,
                 response = %response,
                 "Failed to extract JSON from analysis response"
             );
-            e
         })?;
         serde_json::from_str(json_str).map_err(|e| {
             warn!(
@@ -321,13 +320,12 @@ impl RigStructuredLlm<rig::providers::openai::completion::CompletionModel> {
         tracing::info!(model = %self.model_label, response = %response, "Raw evolution response from NVIDIA");
 
         // Extract and parse JSON from response
-        let json_str = extract_json_from_response(&response).map_err(|e| {
+        let json_str = extract_json_from_response(&response).inspect_err(|_e| {
             warn!(
                 model = %self.model_label,
                 response = %response,
                 "Failed to extract JSON from evolution response"
             );
-            e
         })?;
         serde_json::from_str(json_str).map_err(|e| {
             warn!(

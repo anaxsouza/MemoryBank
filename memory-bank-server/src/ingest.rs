@@ -3659,6 +3659,7 @@ mod tests {
         .expect("projection json")
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn insert_turn_row(
         pool: &SqlitePool,
         conversation_id: &str,
@@ -3704,6 +3705,7 @@ mod tests {
         memory_id
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn insert_turn_row_with_external_id(
         pool: &SqlitePool,
         conversation_id: &str,
