@@ -238,7 +238,9 @@ fn extract_json_from_response(text: &str) -> Result<&str, LlmError> {
             }
         }
     }
-    Err(LlmError::Api("Could not find valid JSON in response".to_string()))
+    Err(LlmError::Api(
+        "Could not find valid JSON in response".to_string(),
+    ))
 }
 
 impl RigStructuredLlm<rig::providers::openai::completion::CompletionModel> {
@@ -307,18 +309,14 @@ impl RigStructuredLlm<rig::providers::openai::completion::CompletionModel> {
         );
 
         // Use regular prompt instead of prompt_typed
-        let response = self
-            .evolve_agent
-            .prompt(prompt)
-            .await
-            .map_err(|e| {
-                warn!(
-                    model = %self.model_label,
-                    error = %e,
-                    "Memory evolution prompt failed"
-                );
-                LlmError::Api(e.to_string())
-            })?;
+        let response = self.evolve_agent.prompt(prompt).await.map_err(|e| {
+            warn!(
+                model = %self.model_label,
+                error = %e,
+                "Memory evolution prompt failed"
+            );
+            LlmError::Api(e.to_string())
+        })?;
 
         tracing::info!(model = %self.model_label, response = %response, "Raw evolution response from NVIDIA");
 
@@ -350,7 +348,8 @@ type OpenAiStructuredLlm =
     RigStructuredLlm<rig::providers::openai::responses_api::ResponsesCompletionModel>;
 /// OpenAI provider using Chat Completions API (/v1/chat/completions) instead of Responses API.
 /// Used for custom endpoints like NVIDIA NIM, OpenRouter, Groq, etc. that don't support Responses API.
-type OpenAiChatStructuredLlm = RigStructuredLlm<rig::providers::openai::completion::CompletionModel>;
+type OpenAiChatStructuredLlm =
+    RigStructuredLlm<rig::providers::openai::completion::CompletionModel>;
 type OllamaStructuredLlm = RigStructuredLlm<rig::providers::ollama::CompletionModel>;
 
 pub enum LlmClient {

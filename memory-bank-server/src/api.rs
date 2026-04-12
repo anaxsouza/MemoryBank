@@ -1,4 +1,4 @@
-use axum::extract::{State};
+use axum::extract::State;
 use axum::response::Json;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -60,7 +60,11 @@ pub async fn handle_status(State(state): State<ApiState>) -> Json<StatusResponse
     let timestamp_range = state.db.memory_timestamp_range().await.unwrap_or(None);
     let unique_tags = state.db.unique_tags().await.unwrap_or_default();
     let unique_keywords = state.db.unique_keywords().await.unwrap_or_default();
-    let turns_by_status = state.ingest.count_turns_by_status().await.unwrap_or_default();
+    let turns_by_status = state
+        .ingest
+        .count_turns_by_status()
+        .await
+        .unwrap_or_default();
 
     let (earliest_timestamp, latest_timestamp) = timestamp_range.unzip();
     let namespace_name = state.health.namespace.clone();
@@ -121,9 +125,18 @@ mod tests {
             },
             ingest: IngestStats {
                 turns_by_status: vec![
-                    StatusCount { status: "stored".to_string(), count: 38 },
-                    StatusCount { status: "processing".to_string(), count: 1 },
-                    StatusCount { status: "open".to_string(), count: 3 },
+                    StatusCount {
+                        status: "stored".to_string(),
+                        count: 38,
+                    },
+                    StatusCount {
+                        status: "processing".to_string(),
+                        count: 1,
+                    },
+                    StatusCount {
+                        status: "open".to_string(),
+                        count: 3,
+                    },
                 ],
             },
         };
